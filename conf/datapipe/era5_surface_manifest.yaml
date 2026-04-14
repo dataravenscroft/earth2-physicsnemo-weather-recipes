@@ -5,7 +5,7 @@ dataset:
 
 source:
   data_root_key: era5_root
-  file_glob: "**/*.nc"
+  file_glob: "**/*.npy"
   allow_empty: true
 
 variables:

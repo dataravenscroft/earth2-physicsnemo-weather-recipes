@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,15 +21,20 @@ class ManifestRecord:
 
 
 def infer_timestamp_from_path(path: Path) -> str | None:
-    """Best-effort timestamp inference from a filename stem."""
-    digits = "".join(ch for ch in path.stem if ch.isdigit())
-    for fmt, width in (("%Y%m%d%H", 10), ("%Y%m%d", 8)):
-        if len(digits) >= width:
-            try:
-                parsed = datetime.strptime(digits[:width], fmt)
-                return parsed.isoformat()
-            except ValueError:
-                continue
+    """Best-effort timestamp inference from a filename stem.
+
+    Searches for contiguous digit runs (longest first) to avoid mixing digits
+    from version strings like 'era5' with the actual date digits.
+    """
+    runs = sorted(re.findall(r"\d+", path.stem), key=len, reverse=True)
+    for digits in runs:
+        for fmt, width in (("%Y%m%d%H", 10), ("%Y%m%d", 8)):
+            if len(digits) >= width:
+                try:
+                    parsed = datetime.strptime(digits[:width], fmt)
+                    return parsed.isoformat()
+                except ValueError:
+                    continue
     return None
 
 

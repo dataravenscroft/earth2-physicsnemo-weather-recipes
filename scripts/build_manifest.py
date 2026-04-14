@@ -4,16 +4,12 @@
 from __future__ import annotations
 
 import argparse
-import sys
 from pathlib import Path
-
-REPO_ROOT = Path(__file__).resolve().parents[1]
-SRC_DIR = REPO_ROOT / "src"
-if str(SRC_DIR) not in sys.path:
-    sys.path.insert(0, str(SRC_DIR))
 
 from earth2_recipes.manifests import build_manifest_records, write_manifest_jsonl
 from earth2_recipes.utils import ensure_directory, load_yaml, resolve_configured_path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:
