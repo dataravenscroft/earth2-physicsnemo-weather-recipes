@@ -1,6 +1,6 @@
 dataset:
   name: era5_surface
-  format: netcdf
+  format: npy
   description: ERA5-style surface reanalysis fields for recipe experiments.
 
 source:

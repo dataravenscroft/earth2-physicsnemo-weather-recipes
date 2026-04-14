@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Create small synthetic ERA5-style .npy files for end-to-end demo runs.
 
+The outputs of this script are committed to the repo as demo fixtures
+(see data/README.md). Re-run it only if you need to regenerate them with
+different parameters.
+
 Each file stores shape (4, H, W) with physically-plausible fields:
   C=0  2m_temperature        (K)
   C=1  10m_u_component_of_wind  (m/s)
