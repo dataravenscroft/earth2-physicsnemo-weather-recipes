@@ -25,6 +25,9 @@ reports/
 # Jupyter
 .ipynb_checkpoints/
 
+# Interview prep (local only)
+interview_prep/
+
 # OS / editor
 .DS_Store
 .idea/
