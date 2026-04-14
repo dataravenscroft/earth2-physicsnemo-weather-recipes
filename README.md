@@ -1,117 +1,180 @@
 # earth2-physicsnemo-weather-recipes
 
-`earth2-physicsnemo-weather-recipes` is a lightweight portfolio starter for weather and climate machine learning workflows built around the NVIDIA Earth-2 and PhysicsNeMo ecosystem.
+A lightweight, runnable weather ML pipeline aligned with the NVIDIA Earth-2
+and PhysicsNeMo ecosystem. Covers ERA5-style data ingest, JSONL manifest
+generation, a pluggable forecast model interface, and benchmark-quality
+evaluation artifacts.
 
-This repository is intentionally separate from custom end-to-end data engineering work. The goal here is to show an NVIDIA-native, recipe-style project layout that is easy to understand, easy to extend, and realistic enough to support:
+---
 
-- ERA5-oriented dataset manifest generation
-- config-driven datapipe and experiment definitions
-- a path toward PhysicsNeMo training recipes
-- Earth2Studio pretrained-model inference demos
-- benchmark-style forecast evaluation and plotting
+## What this demonstrates
 
-The first version is deliberately small. It focuses on project shape, naming, and portfolio clarity rather than trying to clone an upstream framework.
+- **ERA5-style manifest pipeline** — directory scan with year-based
+  train / validation / test splitting, written as config-driven JSONL
+- **Pluggable model interface** — `ForecastModel` ABC with `predict(field) -> field`;
+  `PersistenceModel` ships as the baseline; a PhysicsNeMo or Earth2Studio
+  model drops in by subclassing
+- **Persistence baseline benchmark** — RMSE, MAE, bias, and ACC saved to
+  `artifacts/metrics_summary.csv` with physical units; the reference a
+  trained model must beat
+- **Polished figure artifact** — three-panel truth / forecast / error PNG
+  with colorbars in physical units and RMSE annotated on the error panel
+- **Test suite** — 42 tests covering metric properties, manifest roundtrip,
+  timestamp parsing, and model contract enforcement
 
-## Why This Repo Exists
+---
 
-This project is designed to answer a simple portfolio question:
+## Pipeline
 
-How would a clean, standalone weather ML starter look if it were aligned with the Earth-2 / PhysicsNeMo ecosystem from day one?
-
-It is not:
-
-- a fork of `physicsnemo`
-- a replacement for upstream NVIDIA tooling
-- a generic climate data pipeline repo
-- a giant experiment framework
-
-Instead, it is a compact scaffold for recipes, configs, manifests, demos, and evaluation utilities that can evolve alongside upstream NVIDIA tools.
-
-## Project Principles
-
-- `Earth-2 aligned`: naming and workflow shape reflect the NVIDIA weather ecosystem
-- `Recipe-first`: configs describe experiments, datapipes, training, and inference separately
-- `Portfolio-ready`: the structure is easy to explain in a review, interview, or demo
-- `Lightweight`: only a small amount of starter code is included
-- `Upstream-aware`: `physicsnemo/` is treated as a local reference, not as the place to add custom code
-
-## Repository Layout
-
-```text
-earth2-physicsnemo-weather-recipes/
-├── conf/
-│   ├── datapipe/
-│   ├── experiment/
-│   ├── inference/
-│   ├── paths/
-│   └── training/
-├── docs/
-├── scripts/
-└── src/earth2_recipes/
+```
+create_synthetic_era5.py
+        │
+        ▼  data/era5/*.npy  (4 vars × 24 × 48, train/val/test years)
+        │
+build_manifest.py
+        │
+        ▼  manifests/era5_surface_manifest.jsonl  (8 records, split by year)
+        │
+run_inference_demo.py
+        │
+        ├──▶  artifacts/inference_demo.png      (truth / forecast / error)
+        └──▶  artifacts/metrics_summary.csv     (persistence baseline)
 ```
 
-## Included in This Starter
-
-### Configs
-
-The `conf/` tree separates concerns so an experiment can reference independent path, datapipe, training, and inference configs. This keeps the repo close to a recipe-driven workflow without introducing heavyweight orchestration too early.
-
-### Manifest Builder
-
-`scripts/build_manifest.py` scans a local ERA5-style data directory using glob patterns from YAML config and writes a JSONL manifest. This is the seam where a more formal datapipe or catalog integration can grow later.
-
-### Inference Demo
-
-`scripts/run_inference_demo.py` creates a minimal deterministic forecast demo. In the starter version, it defaults to a synthetic persistence-style baseline so the repo remains runnable before any Earth2Studio dependency is fully integrated.
-
-### Evaluation Utilities
-
-The library includes simple forecast metrics and plotting helpers for side-by-side benchmark-style comparisons. These are intentionally small, readable, and easy to swap out once a stronger evaluation stack is in place.
+---
 
 ## Quickstart
 
-Create and activate an environment, then install the project in editable mode:
-
 ```bash
-cd earth2-physicsnemo-weather-recipes
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 ```
 
-Build a manifest from local ERA5-style files:
+Run the full pipeline:
 
 ```bash
-python scripts/build_manifest.py \
-  --datapipe-config conf/datapipe/era5_surface_manifest.yaml \
-  --paths-config conf/paths/local.yaml
+python scripts/create_synthetic_era5.py   # generate ERA5-style demo data
+python scripts/build_manifest.py          # scan → JSONL manifest
+python scripts/run_inference_demo.py      # persistence baseline → artifacts
 ```
 
-Run the starter inference demo:
+Expected output:
+
+```
+Data source : manifest: era5_surface_2018010100.npy → era5_surface_2018070100.npy
+Model       : PersistenceModel
+Figure      : artifacts/inference_demo.png
+Metrics CSV : artifacts/metrics_summary.csv
+Metrics:
+  rmse: 0.6955
+  mae: 0.5493
+  bias: 0.0024
+  anomaly_correlation: 0.9957
+```
+
+Run tests:
 
 ```bash
-python scripts/run_inference_demo.py \
-  --inference-config conf/inference/earth2studio_deterministic_demo.yaml \
-  --paths-config conf/paths/local.yaml
+pytest tests/ -q
+# 42 passed in 0.09s
 ```
 
-## Roadmap Themes
+---
 
-- add a richer ERA5 manifest schema with variable- and lead-time-aware metadata
-- connect configs to real PhysicsNeMo training recipes
-- wire Earth2Studio pretrained inference into the demo path
-- expand evaluation to support multi-lead benchmarks and skill scores
-- add notebook or report artifacts for polished portfolio presentation
+## Persistence baseline (2m_temperature)
 
-See [docs/ROADMAP.md](/Users/catherineravenscroft/git_personal/climate_biogeochem/earth2-physicsnemo-weather-recipes/docs/ROADMAP.md) for the next steps.
+| metric | value | units | baseline |
+|---|---|---|---|
+| RMSE | 0.6955 | K | persistence |
+| MAE | 0.5493 | K | persistence |
+| bias | 0.0024 | K | persistence |
+| ACC | 0.9957 | dimensionless | persistence |
 
-## Notes on Upstream References
+On real ERA5 data the persistence RMSE for 2m temperature at 6h lead is
+typically 1–2 K; a well-trained model reduces that by 30–50%.
 
-This repository assumes local access to upstream tooling for reference and future integration work, but it does not place custom code inside those upstream repos.
+---
 
-- `physicsnemo/` remains an upstream reference clone
-- this repo is the standalone place for portfolio-ready Earth-2 / PhysicsNeMo recipe work
+## Where a real model plugs in
 
-## Current Status
+`src/earth2_recipes/model.py` defines a one-method ABC:
 
-This is a starter scaffold, not a finished benchmark suite. The current files are structured to be credible, readable, and easy to extend, with clear TODO markers where deeper Earth2Studio and PhysicsNeMo integration should happen next.
+```python
+class ForecastModel(ABC):
+    @abstractmethod
+    def predict(self, field: np.ndarray) -> np.ndarray:
+        """(C, H, W) -> (C, H, W)"""
+```
+
+Swap the model in `run_inference_demo.py` at the single instantiation point:
+
+```python
+model = PersistenceModel()        # current default
+# model = MyPhysicsNeMoModel()   # drop-in replacement
+```
+
+Everything downstream — manifest loading, metric computation, figure and
+CSV writing — is model-agnostic.
+
+---
+
+## Repository layout
+
+```
+earth2-physicsnemo-weather-recipes/
+├── conf/
+│   ├── datapipe/   era5_surface_manifest.yaml
+│   ├── experiment/ era5_surface_demo.yaml
+│   ├── inference/  earth2studio_deterministic_demo.yaml
+│   ├── paths/      local.yaml
+│   └── training/   fcn_era5_baseline.yaml
+├── data/
+│   └── era5/       era5_surface_YYYYMMDDHH.npy  (synthetic demo data, committed)
+├── docs/
+│   └── ROADMAP.md
+├── scripts/
+│   ├── create_synthetic_era5.py
+│   ├── build_manifest.py
+│   └── run_inference_demo.py
+├── src/earth2_recipes/
+│   ├── model.py     ForecastModel ABC, PersistenceModel, NoisyPersistenceModel
+│   ├── metrics.py   rmse, mae, bias, anomaly_correlation, write_metrics_csv
+│   ├── manifests.py ManifestRecord, build_manifest_records, write_manifest_jsonl
+│   ├── plotting.py  plot_forecast_comparison
+│   └── utils.py     load_yaml, resolve_configured_path, set_random_seed
+└── tests/
+    ├── test_metrics.py
+    ├── test_manifests.py
+    └── test_model.py
+```
+
+---
+
+## Why this repo exists
+
+This project answers a portfolio question: how would a clean, standalone
+weather ML starter look if it were aligned with the Earth-2 / PhysicsNeMo
+ecosystem from day one?
+
+It is not a fork of `physicsnemo`, a replacement for upstream NVIDIA tooling,
+or a giant experiment framework. It is a compact scaffold for recipes,
+configs, manifests, demos, and evaluation utilities that can evolve alongside
+upstream NVIDIA tools.
+
+**Project principles**
+
+- *Earth-2 aligned* — naming and workflow shape reflect the NVIDIA weather ecosystem
+- *Recipe-first* — configs describe experiments, datapipes, training, and inference separately
+- *Upstream-aware* — `physicsnemo/` is a local reference, not the place to add custom code
+- *Portfolio-ready* — structure is easy to explain in a review, interview, or demo
+
+---
+
+## Roadmap
+
+- Connect configs to real PhysicsNeMo training recipes
+- Wire Earth2Studio pretrained inference into the demo path
+- Expand `ForecastModel.predict` signature with `variables` and `timestamp`
+  to match the Earth2Studio native call convention
+- Multi-lead evaluation (6h, 12h, 24h) with ACC on Z500 as the primary metric
+
+See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
