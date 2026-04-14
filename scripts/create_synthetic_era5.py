@@ -28,8 +28,10 @@ TIMESTAMPS = [
     "2018070100",  # train
     "2019010100",  # train
     "2019070100",  # train
-    "2020010100",  # train
-    "2020010106",  # train  (6-hour step)
+    "2020010100",  # train  — anchor for lead-time pairs
+    "2020010106",  # train  — +6h  from anchor
+    "2020010112",  # train  — +12h from anchor
+    "2020010200",  # train  — +24h from anchor
     "2021010100",  # validation
     "2022010100",  # test
 ]

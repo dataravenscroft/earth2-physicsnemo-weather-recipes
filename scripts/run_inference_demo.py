@@ -15,13 +15,14 @@ Run the full pipeline:
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
 
-from earth2_recipes.metrics import summarize_forecast, write_metrics_csv
+from earth2_recipes.metrics import summarize_forecast
 from earth2_recipes.model import PersistenceModel
 from earth2_recipes.plotting import plot_forecast_comparison
 from earth2_recipes.utils import (
@@ -145,7 +146,14 @@ def main() -> int:
 
     variable = forecast_cfg.get("output_field", "2m_temperature")
     lead_hours_list = forecast_cfg.get("lead_hours", [6])
-    lead_hours = int(lead_hours_list[0])
+
+    UNITS = {
+        "2m_temperature": "K",
+        "10m_u_component_of_wind": "m/s",
+        "10m_v_component_of_wind": "m/s",
+        "mean_sea_level_pressure": "Pa",
+    }
+    units = UNITS.get(variable, "")
 
     # Map output_field to the channel index declared in the datapipe config.
     datapipe_variables = datapipe_cfg.get("variables", [])
@@ -156,31 +164,36 @@ def main() -> int:
         variable_index = 0
 
     model = PersistenceModel()
-    result = load_forecast_pair_from_manifest(
-        manifest_path, model, variable_index=variable_index, lead_hours=lead_hours
-    )
-    if result is not None:
-        truth, forecast, data_desc = result
-        print(f"Data source : {data_desc}")
-        print(f"Variable    : {variable} (channel {variable_index})")
-        print(f"Model       : {model.__class__.__name__}")
-    else:
+    print(f"Model       : {model.__class__.__name__}")
+    print(f"Variable    : {variable} (channel {variable_index})")
+
+    # Evaluate every configured lead hour; keep the first successful result for the figure.
+    lead_results: list[tuple[int, dict[str, float]]] = []
+    figure_fields: tuple[np.ndarray, np.ndarray] | None = None
+
+    for lead_h in lead_hours_list:
+        result = load_forecast_pair_from_manifest(
+            manifest_path, model, variable_index=variable_index, lead_hours=lead_h
+        )
+        if result is not None:
+            truth_l, forecast_l, desc_l = result
+            metrics_l = summarize_forecast(truth=truth_l, forecast=forecast_l)
+            lead_results.append((lead_h, metrics_l))
+            if figure_fields is None:
+                figure_fields = (truth_l, forecast_l)
+            print(f"  {lead_h:>3}h [{desc_l}]  RMSE {metrics_l['rmse']:.4f} {units}  ACC {metrics_l['anomaly_correlation']:.4f}")
+        else:
+            print(f"  {lead_h:>3}h  no valid pair in manifest (skipped)")
+
+    if not lead_results:
         truth, forecast = synthetic_truth_and_forecast(seed=int(runtime_cfg.get("seed", 7)))
-        data_desc = "synthetic fallback"
-        print("Data source : synthetic (no valid lead-time pair in manifest; run create_synthetic_era5.py + build_manifest.py)")
-        print("Forecast    : noisy synthetic field")
+        figure_fields = (truth, forecast)
+        metrics_fallback = summarize_forecast(truth=truth, forecast=forecast)
+        lead_results = [(lead_hours_list[0], metrics_fallback)]
+        print("  falling back to synthetic (run create_synthetic_era5.py + build_manifest.py)")
 
-    summary = summarize_forecast(truth=truth, forecast=forecast)
-
-    lead = lead_hours
-    # Map the standard ERA5 surface variable names to display units.
-    UNITS = {
-        "2m_temperature": "K",
-        "10m_u_component_of_wind": "m/s",
-        "10m_v_component_of_wind": "m/s",
-        "mean_sea_level_pressure": "Pa",
-    }
-    units = UNITS.get(variable, "")
+    truth, forecast = figure_fields  # type: ignore[misc]
+    lead = lead_results[0][0]
 
     output_dir = resolve_configured_path(
         paths_cfg,
@@ -196,19 +209,19 @@ def main() -> int:
     plot_forecast_comparison(
         truth=truth, forecast=forecast, output_path=figure_path, title=title, units=units
     )
-    write_metrics_csv(
-        output_path=metrics_path,
-        metrics=summary,
-        variable=variable,
-        baseline="persistence",
-        units=units,
-    )
+
+    # Write all evaluated leads to a single CSV with a lead_hours column.
+    _DIMENSIONLESS = {"anomaly_correlation"}
+    with metrics_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["lead_hours", "metric", "value", "units", "variable", "baseline"])
+        for lead_h, metrics in lead_results:
+            for name, value in metrics.items():
+                row_units = "dimensionless" if name in _DIMENSIONLESS else units
+                writer.writerow([lead_h, name, f"{value:.4f}", row_units, variable, "persistence"])
 
     print(f"Figure      : {figure_path.relative_to(REPO_ROOT)}")
     print(f"Metrics CSV : {metrics_path.relative_to(REPO_ROOT)}")
-    print("Metrics:")
-    for name, value in summary.items():
-        print(f"  {name}: {value:.4f}")
 
     return 0
 
