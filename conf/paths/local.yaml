@@ -1,0 +1,9 @@
+project_root: .
+era5_root: ./data/era5
+manifest_root: ./manifests
+artifact_root: ./artifacts
+report_root: ./reports
+
+notes:
+  purpose: Local development defaults for the starter repo.
+  reminder: Update these paths once real ERA5 data is available.

@@ -1,0 +1,19 @@
+name: era5_surface_demo
+description: >
+  Starter experiment definition for a lightweight Earth-2 / PhysicsNeMo-aligned
+  weather workflow using ERA5-style surface fields.
+
+paths_config: conf/paths/local.yaml
+datapipe_config: conf/datapipe/era5_surface_manifest.yaml
+training_config: conf/training/fcn_era5_baseline.yaml
+inference_config: conf/inference/earth2studio_deterministic_demo.yaml
+
+tags:
+  - era5
+  - earth2
+  - physicsnemo
+  - portfolio
+
+notes:
+  owner: catherine-ravenscroft
+  maturity: starter

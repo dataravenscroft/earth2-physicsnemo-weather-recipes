@@ -1,0 +1,27 @@
+recipe:
+  name: fcn_era5_baseline
+  framework: physicsnemo
+  model_family: FourCastNet-style placeholder
+
+data:
+  datapipe_name: era5_surface_manifest
+  input_window_steps: 2
+  lead_time_hours: 6
+  variables:
+    - 2m_temperature
+    - 10m_u_component_of_wind
+    - 10m_v_component_of_wind
+    - mean_sea_level_pressure
+
+optimization:
+  batch_size: 4
+  learning_rate: 1.0e-4
+  max_epochs: 5
+
+runtime:
+  accelerator: cpu
+  mixed_precision: false
+
+todo:
+  - Point this config at a real upstream PhysicsNeMo training recipe.
+  - Keep the wrapper thin instead of copying upstream training internals.

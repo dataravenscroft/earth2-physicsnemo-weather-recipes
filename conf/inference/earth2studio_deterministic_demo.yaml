@@ -1,0 +1,21 @@
+engine:
+  name: earth2studio
+  mode: pretrained_demo
+  model_id: placeholder-deterministic-forecast
+
+runtime:
+  device: cpu
+  seed: 7
+
+forecast:
+  initialization: persistence_baseline_fallback
+  lead_hours: [6, 12, 24]
+  output_field: 2m_temperature
+
+artifacts:
+  output_dir_key: artifact_root
+  figure_name: inference_demo.png
+
+todo:
+  - Replace the fallback demo path with a real Earth2Studio model invocation.
+  - Add support for loading initial conditions from a manifest-backed sample.

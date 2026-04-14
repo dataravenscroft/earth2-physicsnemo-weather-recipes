@@ -1,0 +1,30 @@
+dataset:
+  name: era5_surface
+  format: netcdf
+  description: ERA5-style surface reanalysis fields for recipe experiments.
+
+source:
+  data_root_key: era5_root
+  file_glob: "**/*.nc"
+  allow_empty: true
+
+variables:
+  - 2m_temperature
+  - 10m_u_component_of_wind
+  - 10m_v_component_of_wind
+  - mean_sea_level_pressure
+
+time:
+  expected_frequency: "6H"
+  split_strategy: by_year
+  train_years: [2018, 2019, 2020]
+  validation_years: [2021]
+  test_years: [2022]
+
+manifest:
+  output_dir_key: manifest_root
+  output_filename: era5_surface_manifest.jsonl
+
+todo:
+  - Add richer metadata extraction for pressure levels and spatial resolution.
+  - Map this config into a more formal PhysicsNeMo datapipe interface.
