@@ -21,6 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from earth2_recipes.metrics import summarize_forecast, write_metrics_csv
+from earth2_recipes.model import PersistenceModel
 from earth2_recipes.plotting import plot_forecast_comparison
 from earth2_recipes.utils import (
     ensure_directory,
@@ -52,15 +53,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_persistence_pair_from_manifest(
+def load_forecast_pair_from_manifest(
     manifest_path: Path,
+    model: "PersistenceModel",
     variable_index: int = 0,
 ) -> tuple[np.ndarray, np.ndarray, str] | None:
-    """Load truth/persistence pair from two consecutive train records.
+    """Run model on the first train record; return (truth, forecast, description).
 
-    Returns (truth, persistence_forecast, description) or None if unavailable.
-    truth             — field at time t+1,  shape (H, W)
-    persistence_forecast — field at time t, shape (H, W)  (persistence baseline)
+    truth    — field at t+1, shape (H, W)
+    forecast — model.predict(field_t), shape (H, W)
     """
     if not manifest_path.exists():
         return None
@@ -77,17 +78,16 @@ def load_persistence_pair_from_manifest(
         return None
 
     try:
-        field_t = np.load(train[0]["path"])   # (C, H, W)
-        field_t1 = np.load(train[1]["path"])  # (C, H, W)
+        field_t = np.load(train[0]["path"])    # (C, H, W)
+        field_t1 = np.load(train[1]["path"])   # (C, H, W)
     except (FileNotFoundError, ValueError):
         return None
 
-    truth = field_t1[variable_index].astype(np.float64)        # (H, W)
-    persistence = field_t[variable_index].astype(np.float64)   # (H, W)
-    desc = (
-        f"manifest: {Path(train[0]['path']).name} → {Path(train[1]['path']).name}"
-    )
-    return truth, persistence, desc
+    forecast_field = model.predict(field_t)                          # (C, H, W)
+    truth = field_t1[variable_index].astype(np.float64)             # (H, W)
+    forecast = forecast_field[variable_index].astype(np.float64)    # (H, W)
+    desc = f"manifest: {Path(train[0]['path']).name} → {Path(train[1]['path']).name}"
+    return truth, forecast, desc
 
 
 def synthetic_truth_and_forecast(seed: int) -> tuple[np.ndarray, np.ndarray]:
@@ -120,11 +120,12 @@ def main() -> int:
         "output_filename", "era5_surface_manifest.jsonl"
     )
 
-    result = load_persistence_pair_from_manifest(manifest_path)
+    model = PersistenceModel()
+    result = load_forecast_pair_from_manifest(manifest_path, model)
     if result is not None:
         truth, forecast, data_desc = result
         print(f"Data source : {data_desc}")
-        print("Forecast    : persistence baseline (predict t+1 = t)")
+        print(f"Model       : {model.__class__.__name__}")
     else:
         truth, forecast = synthetic_truth_and_forecast(seed=int(runtime_cfg.get("seed", 7)))
         data_desc = "synthetic fallback"
