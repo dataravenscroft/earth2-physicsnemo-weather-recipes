@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -57,11 +58,15 @@ def load_forecast_pair_from_manifest(
     manifest_path: Path,
     model: "PersistenceModel",
     variable_index: int = 0,
+    lead_hours: int = 6,
 ) -> tuple[np.ndarray, np.ndarray, str] | None:
-    """Run model on the first train record; return (truth, forecast, description).
+    """Find a matched lead-time pair in the manifest and run the model.
 
-    truth    — field at t+1, shape (H, W)
-    forecast — model.predict(field_t), shape (H, W)
+    Searches train records for two timestamps exactly lead_hours apart.
+    Returns (truth, forecast, description) or None if no valid pair exists.
+
+    truth    — field at t+lead_hours, channel variable_index, shape (H, W)
+    forecast — model.predict(field_t)[variable_index],          shape (H, W)
     """
     if not manifest_path.exists():
         return None
@@ -73,20 +78,38 @@ def load_forecast_pair_from_manifest(
             if line:
                 records.append(json.loads(line))
 
-    train = [r for r in records if r["split"] == "train"]
-    if len(train) < 2:
+    # Build timestamp → record lookup for train split only.
+    train_by_ts = {
+        datetime.fromisoformat(r["timestamp"]): r
+        for r in records
+        if r["split"] == "train" and r["timestamp"]
+    }
+    if len(train_by_ts) < 2:
         return None
 
+    # Find the first pair where t1 - t0 == lead_hours exactly.
+    delta = timedelta(hours=lead_hours)
+    pair = None
+    for t0 in sorted(train_by_ts):
+        t1 = t0 + delta
+        if t1 in train_by_ts:
+            pair = (train_by_ts[t0], train_by_ts[t1])
+            break
+
+    if pair is None:
+        return None
+
+    rec0, rec1 = pair
     try:
-        field_t = np.load(train[0]["path"])    # (C, H, W)
-        field_t1 = np.load(train[1]["path"])   # (C, H, W)
+        field_t = np.load(rec0["path"])    # (C, H, W)
+        field_t1 = np.load(rec1["path"])   # (C, H, W)
     except (FileNotFoundError, ValueError):
         return None
 
     forecast_field = model.predict(field_t)                          # (C, H, W)
     truth = field_t1[variable_index].astype(np.float64)             # (H, W)
     forecast = forecast_field[variable_index].astype(np.float64)    # (H, W)
-    desc = f"manifest: {Path(train[0]['path']).name} → {Path(train[1]['path']).name}"
+    desc = f"{Path(rec0['path']).name} → {Path(rec1['path']).name} ({lead_hours}h lead)"
     return truth, forecast, desc
 
 
@@ -120,22 +143,36 @@ def main() -> int:
         "output_filename", "era5_surface_manifest.jsonl"
     )
 
+    variable = forecast_cfg.get("output_field", "2m_temperature")
+    lead_hours_list = forecast_cfg.get("lead_hours", [6])
+    lead_hours = int(lead_hours_list[0])
+
+    # Map output_field to the channel index declared in the datapipe config.
+    datapipe_variables = datapipe_cfg.get("variables", [])
+    if variable in datapipe_variables:
+        variable_index = datapipe_variables.index(variable)
+    else:
+        print(f"Warning: {variable!r} not in datapipe variables {datapipe_variables}; using channel 0")
+        variable_index = 0
+
     model = PersistenceModel()
-    result = load_forecast_pair_from_manifest(manifest_path, model)
+    result = load_forecast_pair_from_manifest(
+        manifest_path, model, variable_index=variable_index, lead_hours=lead_hours
+    )
     if result is not None:
         truth, forecast, data_desc = result
         print(f"Data source : {data_desc}")
+        print(f"Variable    : {variable} (channel {variable_index})")
         print(f"Model       : {model.__class__.__name__}")
     else:
         truth, forecast = synthetic_truth_and_forecast(seed=int(runtime_cfg.get("seed", 7)))
         data_desc = "synthetic fallback"
-        print("Data source : synthetic (run create_synthetic_era5.py + build_manifest.py for real data)")
+        print("Data source : synthetic (no valid lead-time pair in manifest; run create_synthetic_era5.py + build_manifest.py)")
         print("Forecast    : noisy synthetic field")
 
     summary = summarize_forecast(truth=truth, forecast=forecast)
 
-    variable = forecast_cfg.get("output_field", "2m_temperature")
-    lead = forecast_cfg.get("lead_hours", ["?"])[0]
+    lead = lead_hours
     # Map the standard ERA5 surface variable names to display units.
     UNITS = {
         "2m_temperature": "K",
