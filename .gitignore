@@ -21,6 +21,7 @@ dist/
 artifacts/
 manifests/
 reports/
+data/era5/*.npy
 
 # Jupyter
 .ipynb_checkpoints/

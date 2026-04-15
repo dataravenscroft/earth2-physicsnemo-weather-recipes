@@ -49,10 +49,10 @@ run_inference_demo.py
 pip install -e ".[dev]"
 ```
 
-Run the full pipeline:
+Generate demo data, then run the full pipeline:
 
 ```bash
-python scripts/create_synthetic_era5.py   # generate ERA5-style demo data
+python scripts/create_synthetic_era5.py   # writes data/era5/*.npy (gitignored)
 python scripts/build_manifest.py          # scan → JSONL manifest
 python scripts/run_inference_demo.py      # persistence baseline → artifacts
 ```
